@@ -25,6 +25,10 @@ gets five lines and shouts **BINGO!**
 - **Host controls** — the host starts the game and can remove (kick) players.
 - **No login** — just enter a name. Your identity (`name + timestamp`) is kept in
   the browser for the session, so a refresh keeps you in the game.
+- **Rejoin** — drop out (refresh, phone lock, flaky network) and you're put right
+  back into the same in-progress game. Your seat is held and your turn is skipped
+  while you're away; the room (and host role) survive a brief disconnect via a
+  short grace window (`REJOIN_GRACE_MS`, default 45s).
 - **Mobile-first UI** — built for phone screens, big tap targets, no desktop assumptions.
 - **Authoritative server** — grids, draws, turn order and win/draw detection all
   run on the server, so the game can't be faked from the client.

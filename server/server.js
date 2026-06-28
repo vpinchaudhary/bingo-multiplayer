@@ -9,7 +9,9 @@ const { RoomStore } = require('./rooms');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-const store = new RoomStore();
+const store = new RoomStore({
+  graceMs: Number(process.env.REJOIN_GRACE_MS) || 45000,
+});
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -59,14 +61,34 @@ function broadcastRoom(roomId) {
   }
 }
 
+// When a grace-window cleanup fires (room emptied, or host handed off after the
+// host never returned), push the change to anyone still connected.
+store.onRoomChange = (roomId) => {
+  broadcastRoom(roomId);
+  broadcastLobby();
+};
+
 io.on('connection', (socket) => {
   const session = sessionOf(socket);
 
-  // Client announces who it is (from localStorage). Sent on every connect.
+  // Client announces who it is (from localStorage). Sent on every connect, so
+  // this is also where we transparently rejoin a game after a refresh / drop.
   socket.on('hello', (rawUser) => {
     const user = sanitizeUser(rawUser);
     if (!user) return socket.emit('errorMsg', 'Invalid name. Please pick a name.');
     session.user = user;
+
+    const existing = store.findRoomByUser(user.id);
+    if (existing) {
+      store.addPlayer(existing.id, user); // marks them connected again
+      session.roomId = existing.id;
+      socket.join(existing.id);
+      socket.emit('joined', existing.id);
+      broadcastRoom(existing.id);
+      broadcastLobby();
+      return;
+    }
+
     socket.emit('lobby', store.listRooms());
   });
 

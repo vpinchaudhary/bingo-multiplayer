@@ -162,19 +162,66 @@ test('room: kick player (host only)', () => {
   assert.equal(room.players.find((p) => p.id === 'c'), undefined);
 });
 
-test('room: disconnect host promotes another and skips turn', () => {
-  const store = new RoomStore();
+test('room: disconnect skips turn now; host reassigned only after grace', () => {
+  const store = new RoomStore({ graceMs: 9999 });
   const room = store.createRoom(user('a'));
   store.addPlayer(room.id, user('b'));
   store.startGame(room.id, 'a');
-  store.disconnect(room.id, 'a'); // host a leaves
-  assert.equal(room.hostId, 'b');
+  store.disconnect(room.id, 'a'); // host a drops
+  // Turn skips the disconnected player immediately...
   assert.equal(room.players[room.turnIndex].id, 'b');
+  // ...but the host role is held during the grace window.
+  assert.equal(room.hostId, 'a');
+  store.runCleanupNow(room.id); // grace elapses without a returning
+  assert.equal(room.hostId, 'b');
 });
 
-test('room: empty room is deleted', () => {
-  const store = new RoomStore();
+test('room: empty room is held during grace, deleted after', () => {
+  const store = new RoomStore({ graceMs: 9999 });
   const room = store.createRoom(user('a'));
   store.disconnect(room.id, 'a');
-  assert.equal(store.getRoom(room.id), null);
+  assert.ok(store.getRoom(room.id), 'kept during grace window');
+  store.runCleanupNow(room.id);
+  assert.equal(store.getRoom(room.id), null, 'removed after grace');
+});
+
+test('rejoin: dropped player returns to the same in-progress game', () => {
+  const store = new RoomStore({ graceMs: 9999 });
+  const room = store.createRoom(user('a'));
+  store.addPlayer(room.id, user('b'));
+  store.startGame(room.id, 'a');
+  // a calls 1, then b drops mid-game.
+  store.callNumber(room.id, 'a', 1);
+  store.disconnect(room.id, 'b');
+  assert.equal(room.players.find((p) => p.id === 'b').connected, false);
+
+  // b reconnects via addPlayer (what the server's "hello" rejoin does).
+  const rejoined = store.addPlayer(room.id, user('b'));
+  assert.ok(rejoined);
+  assert.equal(rejoined.connected, true);
+  assert.equal(room.status, 'playing', 'same game still running');
+  // Their board and the called numbers were preserved.
+  assert.ok(rejoined.grid);
+  assert.deepEqual(room.calledNumbers, [1]);
+});
+
+test('rejoin: host reclaims role by returning before grace ends', () => {
+  const store = new RoomStore({ graceMs: 9999 });
+  const room = store.createRoom(user('a'));
+  store.addPlayer(room.id, user('b'));
+  store.disconnect(room.id, 'a'); // host drops
+  store.addPlayer(room.id, user('a')); // ...but comes right back
+  store.runCleanupNow(room.id);
+  assert.equal(room.hostId, 'a', 'host retained after returning in time');
+});
+
+test('rejoin: room survives a solo refresh within the grace window', () => {
+  const store = new RoomStore({ graceMs: 9999 });
+  const room = store.createRoom(user('a'));
+  store.disconnect(room.id, 'a');   // tab closed
+  assert.ok(store.getRoom(room.id)); // still there
+  const back = store.addPlayer(room.id, user('a')); // refreshed back in
+  assert.ok(back);
+  store.runCleanupNow(room.id);
+  assert.ok(store.getRoom(room.id), 'room kept because player returned');
 });

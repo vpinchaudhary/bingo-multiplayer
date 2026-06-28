@@ -16,9 +16,30 @@ let roomSeq = 1;
 /** @typedef {{ id: string, name: string }} User */
 
 class RoomStore {
-  constructor() {
+  /**
+   * @param {object} [opts]
+   * @param {number} [opts.graceMs] - how long a disconnected player's seat (and
+   *        an emptied room / vacated host role) is held before cleanup, so a
+   *        refresh or brief network blip can rejoin the same game.
+   */
+  constructor(opts = {}) {
     /** @type {Map<string, object>} roomId -> room */
     this.rooms = new Map();
+    this.graceMs = opts.graceMs != null ? opts.graceMs : 45000;
+    /** Optional (roomId) => void, called when a deferred cleanup changes a room. */
+    this.onRoomChange = null;
+  }
+
+  _emitChange(roomId) {
+    if (typeof this.onRoomChange === 'function') this.onRoomChange(roomId);
+  }
+
+  /** Find the room a user is currently a member of (for rejoin), or null. */
+  findRoomByUser(userId) {
+    for (const room of this.rooms.values()) {
+      if (room.players.some((p) => p.id === userId)) return room;
+    }
+    return null;
   }
 
   /** Public, lobby-safe summary of every room. */
@@ -67,12 +88,15 @@ class RoomStore {
 
     let player = room.players.find((p) => p.id === user.id);
     if (player) {
+      // Rejoin: an existing member is reconnecting (refresh / network blip).
+      // Works in any room state, including a game in progress.
       player.connected = true;
       player.name = user.name; // allow rename on reconnect
+      this._reevaluateCleanup(room);
       return player;
     }
 
-    // New players can only join a room that hasn't started.
+    // Brand-new players can only join a room that hasn't started.
     if (room.status !== 'waiting') return null;
 
     player = {
@@ -83,29 +107,90 @@ class RoomStore {
       lines: 0,
     };
     room.players.push(player);
+    this._reevaluateCleanup(room);
     return player;
   }
 
-  /** Mark a player disconnected; clean up empty/host-less rooms. */
+  /**
+   * Mark a player disconnected. Their seat is held for `graceMs` so a refresh
+   * or brief drop can rejoin the same game. Their turn is skipped immediately,
+   * but the room is only deleted (if empty) or the host only reassigned (if the
+   * host left) once the grace window elapses without them coming back.
+   */
   disconnect(roomId, userId) {
     const room = this.rooms.get(roomId);
     if (!room) return;
     const player = room.players.find((p) => p.id === userId);
     if (player) player.connected = false;
 
-    // If nobody is connected anymore, drop the room.
-    if (!room.players.some((p) => p.connected)) {
+    // Don't make a disconnected player block the game — skip their turn now.
+    this._fixTurnIfNeeded(room);
+
+    // Defer room deletion / host hand-off until the grace window passes.
+    this._reevaluateCleanup(room);
+  }
+
+  // ----- Grace-window cleanup -----
+
+  /** True if the room currently needs deferred cleanup (empty or host gone). */
+  _needsCleanup(room) {
+    const connected = room.players.filter((p) => p.connected);
+    if (connected.length === 0) return true;
+    const host = room.players.find((p) => p.id === room.hostId);
+    return !host || !host.connected;
+  }
+
+  /** (Re)decide whether a cleanup timer should be pending for this room. */
+  _reevaluateCleanup(room) {
+    if (this._needsCleanup(room)) {
+      this._scheduleCleanup(room);
+    } else {
+      this._cancelCleanup(room);
+    }
+  }
+
+  _scheduleCleanup(room) {
+    if (room._cleanupTimer) return; // already pending
+    room._cleanupTimer = setTimeout(() => {
+      room._cleanupTimer = null;
+      this.runCleanupNow(room.id);
+    }, this.graceMs);
+    // A pending cleanup shouldn't keep the process alive on its own.
+    if (room._cleanupTimer && typeof room._cleanupTimer.unref === 'function') {
+      room._cleanupTimer.unref();
+    }
+  }
+
+  _cancelCleanup(room) {
+    if (room._cleanupTimer) {
+      clearTimeout(room._cleanupTimer);
+      room._cleanupTimer = null;
+    }
+  }
+
+  /**
+   * Run cleanup immediately (called by the grace timer; also handy for tests):
+   * delete the room if nobody returned, or hand the host role to a remaining
+   * player if the host never came back. Notifies via onRoomChange if relevant.
+   */
+  runCleanupNow(roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    this._cancelCleanup(room);
+
+    const connected = room.players.filter((p) => p.connected);
+    if (connected.length === 0) {
       this.rooms.delete(roomId);
+      this._emitChange(roomId);
       return;
     }
 
-    // If the host left, promote the first connected player.
-    if (room.hostId === userId) {
-      const next = room.players.find((p) => p.connected);
-      if (next) room.hostId = next.id;
+    const host = room.players.find((p) => p.id === room.hostId);
+    if (!host || !host.connected) {
+      room.hostId = connected[0].id;
+      this._fixTurnIfNeeded(room);
+      this._emitChange(roomId);
     }
-
-    this._fixTurnIfNeeded(room);
   }
 
   /** Host removes a player entirely. */
@@ -117,6 +202,7 @@ class RoomStore {
     room.players.splice(idx, 1);
     if (room.turnIndex >= room.players.length) room.turnIndex = 0;
     this._fixTurnIfNeeded(room);
+    this._reevaluateCleanup(room);
     return true;
   }
 
@@ -128,12 +214,14 @@ class RoomStore {
     if (idx !== -1) room.players.splice(idx, 1);
 
     if (room.players.length === 0) {
+      this._cancelCleanup(room);
       this.rooms.delete(roomId);
       return;
     }
     if (room.hostId === userId) room.hostId = room.players[0].id;
     if (room.turnIndex >= room.players.length) room.turnIndex = 0;
     this._fixTurnIfNeeded(room);
+    this._reevaluateCleanup(room);
   }
 
   /** Host starts the game: deal grids, reset state. */
