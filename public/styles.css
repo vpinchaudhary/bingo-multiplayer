@@ -17,6 +17,11 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* The HTML `hidden` attribute must always win, even over class rules that set
+   an explicit `display` (e.g. .overlay { display: grid }). Without this the
+   result overlay shows on load and "Back to room" appears to do nothing. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;
