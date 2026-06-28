@@ -55,6 +55,29 @@ npm test           # node's built-in test runner
 Covers grid generation, line counting, win/draw detection, turn enforcement,
 kicking, host reassignment and room cleanup.
 
+## Deploy to Render
+
+This repo includes a Render Blueprint (`render.yaml`), so deploying is mostly clicks:
+
+1. Push to GitHub (the Blueprint deploys the `main` branch).
+2. Go to **render.com → New → Blueprint**, pick this repo, and apply.
+   Render reads `render.yaml` and creates the web service for you.
+3. You get a `https://<name>.onrender.com` URL. Every push to `main` auto-deploys
+   — no CI/CD to maintain.
+
+Prefer not to use the Blueprint? **New → Web Service**, pick the repo, and set
+Build = `npm install`, Start = `npm start`. Render auto-detects the rest.
+
+Notes:
+- **WebSockets** work out of the box on Render — no extra config.
+- **Single instance only.** Game state lives in memory, so the service must not
+  be scaled past one instance (`numInstances: 1` in the Blueprint). Two instances
+  would not share rooms.
+- **Free tier** sleeps after ~15 min idle and cold-starts on the next visit;
+  any in-progress game is lost when it sleeps or redeploys. Upgrade to a paid
+  instance to keep it always-on.
+- `/health` is wired up as the Render health check.
+
 ## Project layout
 
 ```

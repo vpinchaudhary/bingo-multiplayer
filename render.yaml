@@ -1,0 +1,22 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# One web service running the Socket.IO game server.
+#
+# IMPORTANT: this game keeps all state in memory, so it must run as a SINGLE
+# instance. Do not raise numInstances / enable autoscaling — a second instance
+# wouldn't share rooms, and players would land in different copies of the game.
+services:
+  - type: web
+    name: bingo-multiplayer
+    runtime: node
+    plan: free            # bump to "starter" to stop the free-tier idle sleep
+    numInstances: 1       # keep at 1 (in-memory rooms are not shared across instances)
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true       # redeploy automatically on every push to the branch below
+    branch: main
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: REJOIN_GRACE_MS
+        value: "45000"     # how long a dropped player's seat is held (ms)
