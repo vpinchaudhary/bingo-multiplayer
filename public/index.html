@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1b0033" />
+  <title>Bingo Night</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Toast / error banner -->
+    <div id="toast" class="toast" hidden></div>
+
+    <!-- ===== Screen: Name ===== -->
+    <section id="screen-name" class="screen active">
+      <div class="hero">
+        <div class="logo">BINGO</div>
+        <p class="tagline">House rules • 5×5 • first to 5 lines wins</p>
+      </div>
+      <form id="name-form" class="card">
+        <label for="name-input">Your name</label>
+        <input id="name-input" type="text" maxlength="24" placeholder="e.g. Asha" autocomplete="off" />
+        <button type="submit" class="btn btn-primary">Let's play</button>
+        <button type="button" id="rename-btn" class="btn btn-ghost" hidden>Use a different name</button>
+      </form>
+    </section>
+
+    <!-- ===== Screen: Lobby ===== -->
+    <section id="screen-lobby" class="screen">
+      <header class="topbar">
+        <div class="who">Hi, <strong id="me-name"></strong></div>
+        <button id="change-name" class="btn btn-tiny">change</button>
+      </header>
+
+      <div class="lobby-head">
+        <h2>Open games</h2>
+        <button id="refresh-lobby" class="btn btn-tiny">↻</button>
+      </div>
+
+      <ul id="room-list" class="room-list"></ul>
+      <p id="no-rooms" class="empty" hidden>No open games yet. Start one!</p>
+
+      <form id="create-form" class="create-bar">
+        <input id="room-name-input" type="text" maxlength="30" placeholder="Game name (optional)" autocomplete="off" />
+        <button type="submit" class="btn btn-primary">+ New game</button>
+      </form>
+    </section>
+
+    <!-- ===== Screen: Room (waiting + playing + result) ===== -->
+    <section id="screen-room" class="screen">
+      <header class="topbar">
+        <button id="leave-room" class="btn btn-tiny">← Leave</button>
+        <div id="room-title" class="room-title"></div>
+        <div id="room-status" class="pill"></div>
+      </header>
+
+      <!-- Waiting lobby of a room -->
+      <div id="waiting-view" class="room-view">
+        <h3>Players</h3>
+        <ul id="waiting-players" class="player-list"></ul>
+        <div id="host-controls" class="host-controls" hidden>
+          <button id="start-game" class="btn btn-primary">Start game</button>
+          <p class="hint">Tap a player to remove them. Need 2+ players.</p>
+        </div>
+        <p id="waiting-hint" class="hint" hidden>Waiting for the host to start…</p>
+      </div>
+
+      <!-- Active game -->
+      <div id="play-view" class="room-view" hidden>
+        <div id="turn-banner" class="turn-banner"></div>
+
+        <div id="bingo-letters" class="bingo-letters"></div>
+
+        <div id="grid" class="grid"></div>
+
+        <div class="last-call" id="last-call"></div>
+
+        <div id="number-pad" class="number-pad"></div>
+
+        <details class="players-peek">
+          <summary>Players &amp; lines</summary>
+          <ul id="play-players" class="player-list compact"></ul>
+        </details>
+
+        <details class="called-peek">
+          <summary>Called numbers</summary>
+          <div id="called-list" class="called-list"></div>
+        </details>
+      </div>
+    </section>
+
+    <!-- Result overlay -->
+    <div id="result-overlay" class="overlay" hidden>
+      <div class="result-card">
+        <div id="result-emoji" class="result-emoji">🎉</div>
+        <h2 id="result-title">BINGO!</h2>
+        <p id="result-detail"></p>
+        <div class="result-actions">
+          <button id="play-again" class="btn btn-primary" hidden>Play again</button>
+          <button id="back-to-room" class="btn btn-ghost">Back to room</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

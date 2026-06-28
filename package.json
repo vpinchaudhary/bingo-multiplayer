@@ -1,0 +1,19 @@
+{
+  "name": "bingo-multiplayer",
+  "version": "1.0.0",
+  "description": "Indianized house-style multiplayer Bingo (5x5, take turns calling, first to 5 lines wins)",
+  "main": "server/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
